@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import UIKit
 import Photos
 
 struct IconExporter {
@@ -16,7 +15,7 @@ struct IconExporter {
             DispatchQueue.main.async {
                 switch status {
                 case .authorized, .limited:
-                    generateAndSaveIcons()
+                    generateAndSaveIcon()
                 case .denied, .restricted:
                     print("相册访问权限被拒绝")
                 case .notDetermined:
@@ -28,16 +27,12 @@ struct IconExporter {
         }
     }
     
-    private static func generateAndSaveIcons() {
-        let sizes: [CGFloat] = [
-            20, 29, 40, 58, 60, 76, 80, 87, 120, 152, 167, 180, 1024
-        ]
-        
-        for size in sizes {
-            let view = AppIconGenerator(size: size)
-            let image = view.asUIImage(size: CGSize(width: size, height: size))
-            saveImageToPhotos(image, name: "AppIcon_\(Int(size))x\(Int(size))")
-        }
+    private static func generateAndSaveIcon() {
+        // 只导出最大尺寸的图标 (1024x1024)
+        let size: CGFloat = 1024
+        let view = ExportableAppIcon(size: size)
+        let image = view.asUIImage(size: CGSize(width: size, height: size))
+        saveImageToPhotos(image, name: "MakeMeBetter_AppIcon_1024x1024")
     }
     
     private static func saveImageToPhotos(_ image: UIImage, name: String) {
@@ -61,10 +56,25 @@ extension View {
         controller.view.bounds = CGRect(origin: .zero, size: size)
         controller.view.backgroundColor = UIColor.clear
         
+        // 添加到窗口中确保正确渲染
+        let window = UIWindow(frame: CGRect(origin: .zero, size: size))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        
+        // 强制布局
+        controller.view.setNeedsLayout()
+        controller.view.layoutIfNeeded()
+        
+        // 等待一个运行循环确保渲染完成
         let renderer = UIGraphicsImageRenderer(size: size)
-        return renderer.image { _ in
-            controller.view.drawHierarchy(in: controller.view.bounds, afterScreenUpdates: true)
+        let image = renderer.image { context in
+            controller.view.drawHierarchy(in: CGRect(origin: .zero, size: size), afterScreenUpdates: true)
         }
+        
+        // 清理
+        window.isHidden = true
+        
+        return image
     }
 }
 
@@ -125,10 +135,10 @@ struct IconExportView: View {
                     
                     Button(action: {
                         IconExporter.exportIcons()
-                        alertMessage = "正在生成并保存图标到相册..."
+                        alertMessage = "正在生成并保存1024x1024图标到相册..."
                         showingAlert = true
                     }) {
-                        Text("导出所有尺寸图标到相册")
+                        Text("导出1024x1024图标到相册")
                             .font(.headline)
                             .foregroundColor(.white)
                             .padding()
@@ -147,10 +157,11 @@ struct IconExportView: View {
                         Text("使用说明")
                             .font(.headline)
                         
-                        Text("1. 点击上方按钮导出图标到相册")
+                        Text("1. 点击上方按钮导出1024x1024图标到相册")
                         Text("2. 从相册中获取生成的图标文件")
-                        Text("3. 在Xcode中添加到AppIcon.appiconset")
-                        Text("4. 完成后将应用入口改回MainTabView()")
+                        Text("3. 使用图片编辑工具调整为其他需要的尺寸")
+                        Text("4. 在Xcode中添加到AppIcon.appiconset")
+                        Text("5. 完成后将应用入口改回MainTabView()")
                     }
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -166,6 +177,62 @@ struct IconExportView: View {
         } message: {
             Text(alertMessage)
         }
+    }
+}
+
+// 专门用于导出的图标组件，确保完整渲染
+struct ExportableAppIcon: View {
+    let size: CGFloat
+    
+    var body: some View {
+        ZStack {
+            // 背景渐变
+            LinearGradient(
+                colors: [
+                    Color.blue,
+                    Color.purple
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            
+            // 主要图标元素
+            VStack(spacing: 20) {
+                // 哑铃图标
+                Image(systemName: "dumbbell.fill")
+                    .font(.system(size: 300, weight: .bold))
+                    .foregroundColor(.white)
+                
+                // 上升趋势箭头
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 150, weight: .bold))
+                    .foregroundColor(.white)
+            }
+            
+            // 装饰圆点
+            VStack {
+                HStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.3))
+                        .frame(width: 80, height: 80)
+                    Spacer()
+                }
+                .padding(.top, 120)
+                .padding(.leading, 120)
+                
+                Spacer()
+                
+                HStack {
+                    Spacer()
+                    Circle()
+                        .fill(Color.white.opacity(0.2))
+                        .frame(width: 60, height: 60)
+                }
+                .padding(.bottom, 120)
+                .padding(.trailing, 120)
+            }
+        }
+        .frame(width: size, height: size)
     }
 }
 

@@ -16,49 +16,43 @@
 
 ## 如何设置应用图标
 
-### 步骤0: 配置Info.plist（重要！）
-在生成图标之前，需要确保项目配置正确：
-
-1. 在Xcode中打开项目
-2. 选择项目Target -> Info标签页
-3. 添加以下权限描述（如果没有的话）：
-   - **Key**: `Privacy - Photo Library Additions Usage Description`
-   - **Value**: `MakeMeBetter需要访问相册来保存应用图标文件，这些图标将用于设置应用的外观。`
-
-或者确保项目中的 `Info.plist` 文件包含相册访问权限描述。
+### 步骤0: 权限配置（已完成）
+相册访问权限已经在项目配置中正确设置：
+- 在项目的Build Settings中添加了 `INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription`
+- 权限描述：`MakeMeBetter需要访问相册来保存应用图标文件，这些图标将用于设置应用的外观。`
 
 ### 步骤1: 生成图标文件
 1. 运行应用，当前会显示图标导出工具
-2. 点击"导出所有尺寸图标到相册"按钮
+2. 点击"导出1024x1024图标到相册"按钮
 3. 系统会请求相册访问权限，请选择"允许"
-4. 应用会生成以下尺寸的图标并保存到相册：
-   - 20x20, 29x29, 40x40, 58x58, 60x60
-   - 76x76, 80x80, 87x87, 120x120, 152x152
-   - 167x167, 180x180, 1024x1024
+4. 应用会生成1024x1024尺寸的高质量图标并保存到相册
 
 ### 步骤2: 从相册获取图标
 1. 打开iPhone/iPad的相册应用
-2. 找到刚才保存的图标文件（按时间排序，最新的）
-3. 将这些图片传输到Mac（通过AirDrop、iCloud等方式）
+2. 找到刚才保存的图标文件（文件名：MakeMeBetter_AppIcon_1024x1024）
+3. 将图片传输到Mac（通过AirDrop、iCloud等方式）
 
-### 步骤3: 添加到Xcode项目
+### 步骤3: 调整图标尺寸
+使用图片编辑工具（如Photoshop、Sketch、Figma等）将1024x1024的图标调整为所需的各种尺寸：
+
+#### iOS应用图标所需尺寸：
+- **iPhone通知**: 20x20, 40x40, 60x60
+- **iPhone设置**: 29x29, 58x58, 87x87
+- **iPhone Spotlight**: 40x40, 80x80, 120x120
+- **iPhone应用**: 120x120, 180x180
+- **iPad通知**: 20x20, 40x40
+- **iPad设置**: 29x29, 58x58
+- **iPad Spotlight**: 40x40, 80x80
+- **iPad应用**: 76x76, 152x152
+- **iPad Pro应用**: 167x167
+- **App Store**: 1024x1024（已有）
+
+### 步骤4: 添加到Xcode项目
 1. 在Xcode中打开项目
 2. 导航到 `Assets.xcassets/AppIcon.appiconset`
-3. 将对应尺寸的图标拖拽到相应的位置：
+3. 将对应尺寸的图标拖拽到相应的位置
 
-#### iOS图标尺寸对应关系：
-- **iPhone通知 (20pt)**: 20x20@1x, 40x40@2x, 60x60@3x
-- **iPhone设置 (29pt)**: 29x29@1x, 58x58@2x, 87x87@3x  
-- **iPhone Spotlight (40pt)**: 40x40@1x, 80x80@2x, 120x120@3x
-- **iPhone应用 (60pt)**: 120x120@2x, 180x180@3x
-- **iPad通知 (20pt)**: 20x20@1x, 40x40@2x
-- **iPad设置 (29pt)**: 29x29@1x, 58x58@2x
-- **iPad Spotlight (40pt)**: 40x40@1x, 80x80@2x
-- **iPad应用 (76pt)**: 76x76@1x, 152x152@2x
-- **iPad Pro应用 (83.5pt)**: 167x167@2x
-- **App Store**: 1024x1024@1x
-
-### 步骤4: 恢复正常应用
+### 步骤5: 恢复正常应用
 完成图标设置后，将 `MakeMeBetterApp.swift` 中的代码改回：
 ```swift
 var body: some Scene {
@@ -76,10 +70,37 @@ var body: some Scene {
 
 这个权限仅在导出图标时使用，正常使用应用时不需要相册权限。
 
+## 技术实现说明
+
+### 权限配置方法
+在现代iOS项目中，权限配置通过项目的Build Settings完成：
+1. 项目使用 `GENERATE_INFOPLIST_FILE = YES` 自动生成Info.plist
+2. 权限通过 `INFOPLIST_KEY_*` 格式的Build Settings配置
+3. 相册权限键：`INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription`
+
+### 图标导出实现
+- 使用 `PHPhotoLibrary.requestAuthorization` 请求权限
+- 使用 `PHAssetChangeRequest.creationRequestForAsset` 保存图片
+- 只导出1024x1024最高质量版本，避免生成问题
+- 用户可以根据需要自行调整为其他尺寸
+
+## 优势说明
+
+### 为什么只导出1024x1024？
+1. **质量保证**: 最大尺寸确保最高图像质量
+2. **避免问题**: 减少批量生成可能出现的错误
+3. **灵活性**: 用户可以根据需要调整为任意尺寸
+4. **简化流程**: 只需处理一个文件，更加简单
+
+### 推荐的图片编辑工具
+- **Mac**: Sketch、Figma、Photoshop
+- **在线工具**: Canva、Figma Web版
+- **免费工具**: GIMP、Preview（预览）应用
+
 ## 故障排除
 
 ### 如果遇到权限错误：
-1. 确保Info.plist中包含 `NSPhotoLibraryAddUsageDescription` 键
+1. 检查项目Build Settings中的权限配置
 2. 在设置 -> 隐私与安全性 -> 照片中检查应用权限
 3. 如果权限被拒绝，可以在设置中手动开启
 
@@ -87,6 +108,11 @@ var body: some Scene {
 1. 检查设备存储空间是否充足
 2. 确保相册应用正常工作
 3. 重启应用后重试
+
+### 如果编译失败：
+1. 确保没有手动创建Info.plist文件（会与自动生成的冲突）
+2. 检查项目配置中的权限设置是否正确
+3. 清理项目缓存后重新编译
 
 ## 注意事项
 
@@ -99,7 +125,11 @@ var body: some Scene {
    - 推荐使用PNG格式
    - 确保图片质量清晰
 
-3. **测试**: 
+3. **尺寸调整**: 
+   - 从大尺寸缩小到小尺寸，保持图像质量
+   - 确保在小尺寸下图标仍然清晰可辨
+
+4. **测试**: 
    - 在不同设备上测试图标显示效果
    - 检查在不同背景下的可见性
 

@@ -27,9 +27,7 @@ struct MakeMeBetterApp: App {
 
     var body: some Scene {
         WindowGroup {
-            // 临时显示图标导出工具，用于生成应用图标
-            // 生成完图标后请改回 MainTabView()
-            IconExportView()
+            MainTabView()
                 .modelContainer(sharedModelContainer)
         }
     }

@@ -86,7 +86,6 @@ struct AppIconGenerator: View {
                 Image(systemName: "dumbbell.fill")
                     .font(.system(size: size * 0.33, weight: .bold))
                     .foregroundColor(.white)
-                    .shadow(color: .black.opacity(0.3), radius: size * 0.017, x: 0, y: size * 0.017)
                 
                 // 上升趋势箭头
                 Image(systemName: "arrow.up.right")
@@ -115,11 +114,7 @@ struct AppIconGenerator: View {
             .padding(size * 0.133)
         }
         .frame(width: size, height: size)
-        .cornerRadius(size * 0.217)
-        .overlay(
-            RoundedRectangle(cornerRadius: size * 0.217)
-                .stroke(.white.opacity(0.2), lineWidth: 1)
-        )
+        .clipped()
     }
 }
 
