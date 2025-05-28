@@ -12,7 +12,9 @@ import SwiftData
 struct MakeMeBetterApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            Item.self,
+            BodyData.self,
+            ExerciseData.self,
+            UserProfile.self
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
@@ -25,8 +27,10 @@ struct MakeMeBetterApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            // 临时显示图标导出工具，用于生成应用图标
+            // 生成完图标后请改回 MainTabView()
+            IconExportView()
+                .modelContainer(sharedModelContainer)
         }
-        .modelContainer(sharedModelContainer)
     }
 }
