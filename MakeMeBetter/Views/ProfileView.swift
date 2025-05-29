@@ -179,6 +179,7 @@ struct ProfileView: View {
                         Button(action: {
                             selectedGender = gender
                             saveProfile()
+                            HapticFeedback.shared.mediumImpact()
                         }) {
                             Text(gender)
                                 .font(.body)

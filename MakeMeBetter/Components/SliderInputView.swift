@@ -7,6 +7,27 @@
 
 import SwiftUI
 
+// 触觉反馈工具类
+class HapticFeedback {
+    static let shared = HapticFeedback()
+    
+    private init() {}
+    
+    func lightImpact() {
+        #if os(iOS)
+        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+        impactFeedback.impactOccurred()
+        #endif
+    }
+    
+    func mediumImpact() {
+        #if os(iOS)
+        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+        impactFeedback.impactOccurred()
+        #endif
+    }
+}
+
 struct SliderInputView: View {
     let title: String
     let unit: String
@@ -17,6 +38,7 @@ struct SliderInputView: View {
     let isDisabled: Bool
     
     @State private var sliderValue: Double
+    @State private var lastFeedbackValue: Double = 0
     
     init(title: String, unit: String, value: Binding<Double?>, range: ClosedRange<Double>, step: Double = 0.1, displayValue: String? = nil, isDisabled: Bool = false) {
         self.title = title
@@ -41,9 +63,17 @@ struct SliderInputView: View {
             Slider(value: $sliderValue, in: range, step: step)
                 .accentColor(isDisabled ? .gray : .blue)
                 .disabled(isDisabled)
-                .onChange(of: sliderValue) { newValue in
+                .onChange(of: sliderValue) { oldValue, newValue in
                     if !isDisabled {
                         value = newValue
+                        
+                        // 添加触觉反馈
+                        // 只有当值变化超过一定阈值时才触发反馈，避免过于频繁
+                        let threshold = step >= 1.0 ? 1.0 : 0.5
+                        if abs(newValue - lastFeedbackValue) >= threshold {
+                            HapticFeedback.shared.lightImpact()
+                            lastFeedbackValue = newValue
+                        }
                     }
                 }
             
@@ -63,11 +93,13 @@ struct SliderInputView: View {
         .onAppear {
             if let currentValue = value {
                 sliderValue = currentValue
+                lastFeedbackValue = currentValue
             }
         }
-        .onChange(of: value) { newValue in
+        .onChange(of: value) { oldValue, newValue in
             if let newValue = newValue {
                 sliderValue = newValue
+                lastFeedbackValue = newValue
             }
         }
     }

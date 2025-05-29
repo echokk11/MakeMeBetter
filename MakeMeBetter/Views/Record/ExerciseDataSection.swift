@@ -116,6 +116,8 @@ struct ExerciseTypeCard: View {
                     Button(action: {
                         if !isLocked {
                             duration = minutes
+                            // 添加触觉反馈
+                            HapticFeedback.shared.lightImpact()
                         }
                     }) {
                         Text("\(Int(minutes))")
