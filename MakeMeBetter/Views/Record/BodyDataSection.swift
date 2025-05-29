@@ -13,6 +13,7 @@ struct BodyDataSection: View {
     let selectedDate: Date
     let isLocked: Bool
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var appStateManager: AppStateManager
     @StateObject private var healthKitManager = HealthKitManager.shared
     
     @State private var weight: Double?
@@ -87,7 +88,8 @@ struct BodyDataSection: View {
                 await autoSyncHealthDataForDate()
             }
         }
-        .onChange(of: bodyData) { _ in
+        .onChange(of: bodyData) { oldData, newData in
+            print("BodyData变化: \(oldData != nil) -> \(newData != nil)")
             loadData()
         }
         .onChange(of: selectedDate) { _, _ in
@@ -110,12 +112,27 @@ struct BodyDataSection: View {
                 }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextDidSave)) { _ in
+            print("收到数据库变化通知，重新加载身体数据")
+            loadData()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .resetUIStates)) { _ in
+            print("收到UI重置通知，重置身体数据UI状态")
+            resetUIStates()
+        }
+        .onChange(of: appStateManager.dataResetTrigger) { _, _ in
+            print("检测到全局数据重置，重置身体数据UI状态")
+            resetUIStates()
+        }
     }
     
     private func loadData() {
+        // 确保当bodyData为nil时，所有状态都被重置
         weight = bodyData?.weight
         bodyFat = bodyData?.bodyFat
         waistline = bodyData?.waistline
+        
+        print("加载身体数据 - 日期: \(selectedDate), 体重: \(weight ?? 0), 体脂: \(bodyFat ?? 0), 腰围: \(waistline ?? 0)")
     }
     
     private func saveData() {
@@ -124,8 +141,19 @@ struct BodyDataSection: View {
             return
         }
         
+        // 验证日期有效性 - 更严格的检查
+        guard !selectedDate.timeIntervalSince1970.isNaN,
+              selectedDate.timeIntervalSince1970 > 0,
+              selectedDate < Date().addingTimeInterval(86400) else { // 不能超过明天
+            print("错误：selectedDate无效，无法保存身体数据 - \(selectedDate)")
+            return
+        }
+        
+        // 确保使用当天开始时间
+        let startOfDay = Calendar.current.startOfDay(for: selectedDate)
+        
         if bodyData == nil {
-            let newBodyData = BodyData(date: selectedDate)
+            let newBodyData = BodyData(date: startOfDay)
             modelContext.insert(newBodyData)
             bodyData = newBodyData
         }
@@ -134,6 +162,7 @@ struct BodyDataSection: View {
         
         do {
             try modelContext.save()
+            print("保存身体数据成功 - 日期: \(startOfDay)")
         } catch {
             print("保存身体数据失败: \(error)")
         }
@@ -233,10 +262,18 @@ struct BodyDataSection: View {
             print("保存腰围数据到Apple Health失败")
         }
     }
+    
+    private func resetUIStates() {
+        // 重置所有UI状态变量
+        weight = nil
+        bodyFat = nil
+        waistline = nil
+        print("身体数据UI状态已重置")
+    }
 }
 
 #Preview {
-    @State var bodyData: BodyData? = nil
+    @Previewable @State var bodyData: BodyData? = nil
     return BodyDataSection(bodyData: $bodyData, selectedDate: Date(), isLocked: false)
         .modelContainer(for: BodyData.self, inMemory: true)
         .padding()

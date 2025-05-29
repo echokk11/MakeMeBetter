@@ -8,8 +8,25 @@
 import SwiftUI
 import SwiftData
 
+// 全局状态管理器
+class AppStateManager: ObservableObject {
+    @Published var dataResetTrigger = UUID()
+    
+    static let shared = AppStateManager()
+    
+    private init() {}
+    
+    func triggerDataReset() {
+        DispatchQueue.main.async {
+            self.dataResetTrigger = UUID()
+        }
+    }
+}
+
 @main
 struct MakeMeBetterApp: App {
+    @StateObject private var appStateManager = AppStateManager.shared
+    
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             BodyData.self,
@@ -24,10 +41,11 @@ struct MakeMeBetterApp: App {
             fatalError("Could not create ModelContainer: \(error)")
         }
     }()
-
+    
     var body: some Scene {
         WindowGroup {
             MainTabView()
+                .environmentObject(appStateManager)
                 .modelContainer(sharedModelContainer)
         }
     }

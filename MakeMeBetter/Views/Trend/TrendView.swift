@@ -246,11 +246,11 @@ struct TrendView: View {
         .onAppear {
             loadData()
         }
-        .onChange(of: selectedMetric) { _ in
-            loadData()
+        .onChange(of: selectedMetric) { _, _ in
+            // 切换指标时不需要重新加载数据，只需要重新计算chartData
         }
-        .onChange(of: dateRange) { _ in
-            loadData()
+        .onChange(of: dateRange) { _, _ in
+            // 切换时间范围时不需要重新加载数据，只需要重新计算chartData
         }
     }
     

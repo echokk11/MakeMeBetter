@@ -8,14 +8,23 @@
 import SwiftUI
 import SwiftData
 
+// 扩展Notification.Name
+extension Notification.Name {
+    static let recordTabSelected = Notification.Name("recordTabSelected")
+    static let dataCleared = Notification.Name("dataCleared")
+    static let resetUIStates = Notification.Name("resetUIStates")
+}
+
 struct RecordView: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var appStateManager: AppStateManager
     @State private var selectedDate = Date()
     @State private var bodyData: BodyData?
     @State private var exerciseData: [ExerciseData] = []
     @State private var isLocked = false
     @State private var consecutiveDays = 0
     @State private var showFireworks = false
+    @State private var refreshKey = UUID() // 强制刷新key
     
     // 判断是否是历史日期（当天之前）
     private var isHistoricalDate: Bool {
@@ -60,7 +69,7 @@ struct RecordView: View {
                         selectedDate: selectedDate,
                         isLocked: isHistoricalDate && isLocked
                     )
-                    .id("body-\(selectedDate.timeIntervalSince1970)")
+                    .id("body-\(selectedDate.timeIntervalSince1970)-\(refreshKey)")
                     
                     // 鼓励横幅 - 放在身体数据和锻炼数据之间
                     if consecutiveDays >= 2 {
@@ -74,12 +83,13 @@ struct RecordView: View {
                         selectedDate: selectedDate,
                         isLocked: isHistoricalDate && isLocked
                     )
-                    .id("exercise-\(selectedDate.timeIntervalSince1970)")
+                    .id("exercise-\(selectedDate.timeIntervalSince1970)-\(refreshKey)")
                 }
                 .padding(.horizontal, 16)
             }
             .padding(.bottom, 16)
         }
+        .id(refreshKey)
         .background(
             LinearGradient(
                 colors: [.blue.opacity(0.1), .purple.opacity(0.1)],
@@ -92,15 +102,39 @@ struct RecordView: View {
             checkConsecutiveDays()
         }
         .onChange(of: selectedDate) { _, _ in
-            // 切换日期时重新锁定
             isLocked = true
             loadDataForDate()
-            // 连续天数始终以今天为准，不随日期切换变化
+            checkConsecutiveDays()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextDidSave)) { _ in
+            loadDataForDate()
+            checkConsecutiveDays()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .recordTabSelected)) { _ in
+            print("切换到记录tab，重新加载数据")
+            loadDataForDate()
+            checkConsecutiveDays()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .dataCleared)) { _ in
+            print("收到数据清空通知，重置所有UI状态")
+            resetAllUIStates()
+            loadDataForDate()
+            checkConsecutiveDays()
+        }
+        .onChange(of: appStateManager.dataResetTrigger) { _, _ in
+            print("检测到全局数据重置，强制重置所有UI状态")
+            resetAllUIStates()
+            loadDataForDate()
             checkConsecutiveDays()
         }
     }
     
     private func loadDataForDate() {
+        guard !selectedDate.timeIntervalSince1970.isNaN else {
+            print("错误：selectedDate无效")
+            return
+        }
+        
         let startOfDay = Calendar.current.startOfDay(for: selectedDate)
         
         print("开始加载日期数据: \(startOfDay)")
@@ -136,11 +170,6 @@ struct RecordView: View {
         }
         
         print("加载完成 - 日期: \(startOfDay), 身体数据: \(bodyData != nil), 锻炼数据: \(exerciseData.count)条")
-        
-        // 强制刷新UI
-        DispatchQueue.main.async {
-            // 触发UI更新
-        }
     }
     
     private func checkConsecutiveDays() {
@@ -196,6 +225,28 @@ struct RecordView: View {
                 }
             }
         }
+    }
+    
+    private func resetAllUIStates() {
+        // 重置所有状态变量
+        bodyData = nil
+        exerciseData = []
+        consecutiveDays = 0
+        showFireworks = false
+        
+        // 确保selectedDate保持有效
+        if selectedDate.timeIntervalSince1970.isNaN || selectedDate.timeIntervalSince1970 <= 0 {
+            selectedDate = Date()
+            print("selectedDate无效，重置为当前日期")
+        }
+        
+        // 更新refreshKey强制重新创建整个视图
+        refreshKey = UUID()
+        
+        // 发送通知给子组件，让它们也重置状态
+        NotificationCenter.default.post(name: .resetUIStates, object: nil)
+        
+        print("强制重置所有UI状态，refreshKey已更新，selectedDate: \(selectedDate)")
     }
 }
 

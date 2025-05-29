@@ -26,6 +26,11 @@ final class ExerciseData {
     var updatedAt: Date
     
     init(date: Date = Date(), type: ExerciseType, duration: Double? = nil, intensity: Double? = nil, calories: Double? = nil, notes: String? = nil) {
+        // 验证日期有效性
+        guard !date.timeIntervalSince1970.isNaN else {
+            fatalError("ExerciseData: 传入的日期无效")
+        }
+        
         self.date = Calendar.current.startOfDay(for: date)
         self.type = type.rawValue
         self.duration = duration

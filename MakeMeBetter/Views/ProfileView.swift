@@ -11,6 +11,7 @@ import PhotosUI
 
 struct ProfileView: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var appStateManager: AppStateManager
     @Query private var profiles: [UserProfile]
     @StateObject private var healthKitManager = HealthKitManager.shared
     
@@ -57,6 +58,7 @@ struct ProfileView: View {
         }
         .onAppear {
             loadProfile()
+            loadAvatarFromLocal()
             Task {
                 await healthKitManager.requestAuthorization()
             }
@@ -93,9 +95,6 @@ struct ProfileView: View {
                     }
                 }
             }
-        }
-        .onAppear {
-            loadAvatarFromLocal()
         }
     }
     
@@ -208,13 +207,20 @@ struct ProfileView: View {
                         .font(.headline)
                         .foregroundColor(.primary)
                     Spacer()
+                    Text("\(calculateAge())岁")
+                        .font(.body)
+                        .foregroundColor(.secondary)
                 }
                 
-                DatePicker("", selection: $birthDate, displayedComponents: .date)
-                    .datePickerStyle(.compact)
-                    .onChange(of: birthDate) { _, _ in
-                        saveProfile()
-                    }
+                HStack {
+                    DatePicker("", selection: $birthDate, displayedComponents: .date)
+                        .datePickerStyle(.compact)
+                        .fixedSize()
+                        .onChange(of: birthDate) { _, _ in
+                            saveProfile()
+                        }
+                    Spacer()
+                }
             }
             
             // 身高
@@ -362,10 +368,19 @@ struct ProfileView: View {
             // 保存更改
             try modelContext.save()
             
-            print("所有本地数据已清空")
+            // 使用全局状态管理器触发UI重置
+            appStateManager.triggerDataReset()
+            
+            print("所有本地数据已清空，UI状态已重置")
         } catch {
             print("清空数据失败: \(error)")
         }
+    }
+    
+    private func calculateAge() -> Int {
+        let calendar = Calendar.current
+        let ageComponents = calendar.dateComponents([.year], from: birthDate, to: Date())
+        return ageComponents.year ?? 0
     }
 }
 

@@ -18,6 +18,11 @@ final class BodyData {
     var updatedAt: Date
     
     init(date: Date = Date(), weight: Double? = nil, bodyFat: Double? = nil, waistline: Double? = nil) {
+        // 验证日期有效性
+        guard !date.timeIntervalSince1970.isNaN else {
+            fatalError("BodyData: 传入的日期无效")
+        }
+        
         self.date = Calendar.current.startOfDay(for: date)
         self.weight = weight
         self.bodyFat = bodyFat

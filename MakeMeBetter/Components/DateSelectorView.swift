@@ -82,6 +82,6 @@ struct DateSelectorView: View {
 }
 
 #Preview {
-    @State var date = Date()
+    @Previewable @State var date = Date()
     return DateSelectorView(selectedDate: $date)
 } 

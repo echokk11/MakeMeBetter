@@ -13,6 +13,7 @@ struct ExerciseDataSection: View {
     let selectedDate: Date
     let isLocked: Bool
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var appStateManager: AppStateManager
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -38,6 +39,18 @@ struct ExerciseDataSection: View {
             .padding(.horizontal, 20)
         }
         .padding(.vertical, 12)
+        .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextDidSave)) { _ in
+            print("收到数据库变化通知，重新加载锻炼数据")
+            exerciseData = []
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .resetUIStates)) { _ in
+            print("收到UI重置通知，重置锻炼数据UI状态")
+            exerciseData = []
+        }
+        .onChange(of: appStateManager.dataResetTrigger) { _, _ in
+            print("检测到全局数据重置，重置锻炼数据UI状态")
+            exerciseData = []
+        }
     }
     
     private func exerciseDataForType(_ type: ExerciseType) -> ExerciseData? {
@@ -158,22 +171,28 @@ struct ExerciseTypeCard: View {
                 saveData()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .resetUIStates)) { _ in
+            print("收到UI重置通知，重置\(exerciseType.rawValue)时长状态")
+            duration = nil
+        }
     }
     
     private func loadData() {
-        let newDuration = exerciseData?.duration
-        
-        // 强制更新状态，确保UI同步
-        DispatchQueue.main.async {
-            duration = newDuration
-        }
-        
-        print("加载锻炼数据 - 类型: \(exerciseType.rawValue), 日期: \(selectedDate), 数据存在: \(exerciseData != nil), 时长: \(newDuration ?? 0)")
+        duration = exerciseData?.duration
+        print("加载锻炼数据 - 类型: \(exerciseType.rawValue), 日期: \(selectedDate), 数据存在: \(exerciseData != nil), 时长: \(duration ?? 0)")
     }
     
     private func saveData() {
         // 如果锁定状态，不保存数据
         if isLocked {
+            return
+        }
+        
+        // 验证日期有效性 - 更严格的检查
+        guard !selectedDate.timeIntervalSince1970.isNaN,
+              selectedDate.timeIntervalSince1970 > 0,
+              selectedDate < Date().addingTimeInterval(86400) else { // 不能超过明天
+            print("错误：selectedDate无效，无法保存锻炼数据 - \(selectedDate)")
             return
         }
         
@@ -207,7 +226,7 @@ struct ExerciseTypeCard: View {
 }
 
 #Preview {
-    @State var exerciseData: [ExerciseData] = []
+    @Previewable @State var exerciseData: [ExerciseData] = []
     return ExerciseDataSection(exerciseData: $exerciseData, selectedDate: Date(), isLocked: false)
         .modelContainer(for: ExerciseData.self, inMemory: true)
         .padding()

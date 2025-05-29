@@ -114,12 +114,12 @@ struct SliderInputView: View {
 }
 
 #Preview {
-    @State var weight: Double? = 65.0
+    @Previewable @State var weight: Double? = 65.0
     return SliderInputView(
         title: "体重",
         unit: "kg",
         value: $weight,
-        range: 30.0...150.0
+        range: 40.0...120.0
     )
     .padding()
 } 
