@@ -165,7 +165,7 @@ struct ProfileView: View {
             // 性别选择
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Image(systemName: selectedGender == "女" ? "person.dress" : "person")
+                    Image(systemName: selectedGender == "女" ? "person.circle.fill" : "person.circle")
                         .foregroundColor(selectedGender == "女" ? .pink : .blue)
                         .font(.title2)
                     Text("性别")

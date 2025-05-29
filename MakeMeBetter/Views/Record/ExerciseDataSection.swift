@@ -32,6 +32,7 @@ struct ExerciseDataSection: View {
                             updateExerciseData(for: type, with: data)
                         }
                     )
+                    .id("\(type.rawValue)-\(selectedDate.timeIntervalSince1970)")
                 }
             }
             .padding(.horizontal, 20)
@@ -138,14 +139,34 @@ struct ExerciseTypeCard: View {
         .onAppear {
             loadData()
         }
-        .onChange(of: exerciseData) { _ in
+        .onChange(of: selectedDate) { oldDate, newDate in
+            // 日期变化时立即重置状态，避免脏数据
+            print("日期变化: \(oldDate) -> \(newDate), 重置 \(exerciseType.rawValue) 数据")
             loadData()
         }
-        .onChange(of: duration) { _ in saveData() }
+        .onChange(of: exerciseData) { oldData, newData in
+            // 数据变化时更新UI状态
+            print("数据变化: \(exerciseType.rawValue), 旧数据: \(oldData?.duration ?? 0), 新数据: \(newData?.duration ?? 0)")
+            loadData()
+        }
+        .onChange(of: duration) { oldDuration, newDuration in
+            // 只有用户主动修改时才保存
+            if oldDuration != newDuration {
+                print("用户修改时长: \(exerciseType.rawValue), \(oldDuration ?? 0) -> \(newDuration ?? 0)")
+                saveData()
+            }
+        }
     }
     
     private func loadData() {
-        duration = exerciseData?.duration
+        let newDuration = exerciseData?.duration
+        
+        // 强制更新状态，确保UI同步
+        DispatchQueue.main.async {
+            duration = newDuration
+        }
+        
+        print("加载锻炼数据 - 类型: \(exerciseType.rawValue), 日期: \(selectedDate), 数据存在: \(exerciseData != nil), 时长: \(newDuration ?? 0)")
     }
     
     private func saveData() {
@@ -153,6 +174,9 @@ struct ExerciseTypeCard: View {
         if isLocked {
             return
         }
+        
+        // 确保使用当天开始时间，与查询逻辑保持一致
+        let startOfDay = Calendar.current.startOfDay(for: selectedDate)
         
         if duration == nil || duration == 0 {
             // 如果时长为空或0，删除数据
@@ -162,7 +186,7 @@ struct ExerciseTypeCard: View {
             }
         } else {
             // 创建或更新数据
-            let data = exerciseData ?? ExerciseData(date: selectedDate, type: exerciseType)
+            let data = exerciseData ?? ExerciseData(date: startOfDay, type: exerciseType)
             if exerciseData == nil {
                 modelContext.insert(data)
             }
@@ -173,6 +197,7 @@ struct ExerciseTypeCard: View {
         
         do {
             try modelContext.save()
+            print("保存锻炼数据成功 - 日期: \(startOfDay), 类型: \(exerciseType.rawValue), 时长: \(duration ?? 0)")
         } catch {
             print("保存锻炼数据失败: \(error)")
         }
