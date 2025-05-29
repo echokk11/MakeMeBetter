@@ -65,8 +65,6 @@ struct DateSelectorView: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
-        .background(Color(.systemBackground))
-        .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
     
     private func previousDay() {

@@ -11,9 +11,9 @@
 ### 🏠 记录页面
 - **日期选择器**: 顶部日期组件，支持左右滑动切换日期，自动限制不能选择未来日期
 - **身体数据记录**: 
-  - 体重 (40-120kg)
-  - 体脂率 (8-35%)
-  - 腰围 (60-120cm)
+  - 体重 (40-120kg) - 支持从Apple Health读取
+  - 体脂率 (8-35%) - 支持从Apple Health读取
+  - 腰围 (60-120cm) - 支持从Apple Health读取，修改时自动同步到Apple Health
   - 实时BMI计算和健康状态显示
 - **锻炼数据记录**:
   - 有氧运动时长
@@ -23,6 +23,7 @@
   - 备注功能
 - **实时数据保存**: 滑动组件变化时自动保存数据
 - **智能数据加载**: 切换日期时自动加载对应日期的历史数据
+- **Apple Health集成**: 自动读取健康数据，腰围数据双向同步
 
 ### 📊 趋势页面
 - **多指标趋势图**: 使用Charts框架展示6种数据指标的变化曲线
@@ -41,8 +42,9 @@
 - **基本信息设置**:
   - 性别选择 (动态图标颜色)
   - 出生日期 (默认1990.01.01)
-  - 身高设置
+  - 身高设置 - 支持从Apple Health读取
 - **现代化UI设计**: 渐变背景、卡片布局、适配刘海屏
+- **Apple Health连接**: 一键连接健康应用，自动同步身高等基础数据
 
 ## 🛠 技术特性
 
@@ -51,17 +53,20 @@
 - **SwiftUI**: 使用最新的SwiftUI框架构建用户界面
 - **SwiftData**: 现代化的数据持久化解决方案
 - **Charts框架**: 原生图表组件，性能优异
+- **HealthKit集成**: 与Apple Health无缝集成，支持健康数据读取和写入
 
 ### 数据模型
 - **UserProfile**: 用户个人信息 (性别、出生日期、身高、头像)
 - **BodyData**: 身体数据 (体重、体脂、腰围、BMI)
 - **ExerciseData**: 锻炼数据 (有氧、力量、HIIT时长及备注)
+- **HealthKitManager**: Apple Health数据管理器，处理权限和数据同步
 
 ### 核心组件
 - **SliderInputView**: 通用滑动输入组件
 - **DateSelectorView**: 日期选择组件，支持左右切换
 - **BMI计算器**: 实时计算并显示健康状态
 - **趋势图表**: 多指标数据可视化
+- **HealthKitManager**: Apple Health数据管理器，处理权限和数据同步
 
 ## 🎨 设计特色
 
@@ -100,7 +105,11 @@
 - **iOS版本**: iOS 16.0+
 - **Xcode版本**: Xcode 15.0+
 - **Swift版本**: Swift 5.9+
-- **依赖框架**: SwiftUI, SwiftData, Charts
+- **依赖框架**: SwiftUI, SwiftData, Charts, HealthKit
+- **权限要求**: 
+  - 相册访问权限（图标导出功能）
+  - 健康数据读取权限（体重、身高、体脂率、腰围）
+  - 健康数据写入权限（腰围数据同步）
 
 ## 📦 项目结构
 
@@ -109,7 +118,8 @@ MakeMeBetter/
 ├── Models/                 # 数据模型
 │   ├── UserProfile.swift
 │   ├── BodyData.swift
-│   └── ExerciseData.swift
+│   ├── ExerciseData.swift
+│   └── HealthKitManager.swift
 ├── Views/                  # 页面视图
 │   ├── MainTabView.swift
 │   ├── RecordView.swift
@@ -122,6 +132,7 @@ MakeMeBetter/
 │   ├── ExerciseDataSection.swift
 │   ├── AppIconView.swift
 │   └── IconExporter.swift
+├── MakeMeBetter.entitlements  # 应用权限配置
 └── MakeMeBetterApp.swift  # 应用入口
 ```
 
@@ -138,7 +149,8 @@ MakeMeBetter/
 - [ ] 支持多种锻炼类型
 - [ ] 增加目标设定和提醒
 - [ ] 添加数据分析和建议
-- [ ] 支持Apple Health集成
+- [x] 支持Apple Health集成（已完成基础功能）
+- [ ] 扩展Apple Health集成（更多健康指标）
 
 ## 📄 许可证
 

@@ -11,6 +11,7 @@ import SwiftData
 struct ExerciseDataSection: View {
     @Binding var exerciseData: [ExerciseData]
     let selectedDate: Date
+    let isLocked: Bool
     @Environment(\.modelContext) private var modelContext
     
     var body: some View {
@@ -26,6 +27,7 @@ struct ExerciseDataSection: View {
                         exerciseType: type,
                         exerciseData: exerciseDataForType(type),
                         selectedDate: selectedDate,
+                        isLocked: isLocked,
                         onDataChanged: { data in
                             updateExerciseData(for: type, with: data)
                         }
@@ -58,6 +60,7 @@ struct ExerciseTypeCard: View {
     let exerciseType: ExerciseType
     let exerciseData: ExerciseData?
     let selectedDate: Date
+    let isLocked: Bool
     let onDataChanged: (ExerciseData?) -> Void
     
     @Environment(\.modelContext) private var modelContext
@@ -98,31 +101,36 @@ struct ExerciseTypeCard: View {
                 unit: "m",
                 value: $duration,
                 range: 0.0...120.0,
-                step: 1.0
+                step: 1.0,
+                isDisabled: isLocked
             )
             
             // 快捷按钮
             HStack(spacing: 8) {
                 Text("快捷:")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(isLocked ? .secondary.opacity(0.6) : .secondary)
                 
                 ForEach(quickDurations, id: \.self) { minutes in
                     Button(action: {
-                        duration = minutes
+                        if !isLocked {
+                            duration = minutes
+                        }
                     }) {
                         Text("\(Int(minutes))")
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(duration == minutes ? .white : accentColor)
+                            .foregroundColor(isLocked ? .secondary : (duration == minutes ? .white : accentColor))
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(duration == minutes ? accentColor : accentColor.opacity(0.1))
+                            .background(isLocked ? Color.gray.opacity(0.2) : (duration == minutes ? accentColor : accentColor.opacity(0.1)))
                             .cornerRadius(6)
                     }
+                    .disabled(isLocked)
                 }
                 
                 Spacer()
             }
+            .opacity(isLocked ? 0.6 : 1.0)
         }
         .padding(12)
         .background(backgroundColor)
@@ -141,6 +149,11 @@ struct ExerciseTypeCard: View {
     }
     
     private func saveData() {
+        // 如果锁定状态，不保存数据
+        if isLocked {
+            return
+        }
+        
         if duration == nil || duration == 0 {
             // 如果时长为空或0，删除数据
             if let data = exerciseData {
@@ -168,7 +181,7 @@ struct ExerciseTypeCard: View {
 
 #Preview {
     @State var exerciseData: [ExerciseData] = []
-    return ExerciseDataSection(exerciseData: $exerciseData, selectedDate: Date())
+    return ExerciseDataSection(exerciseData: $exerciseData, selectedDate: Date(), isLocked: false)
         .modelContainer(for: ExerciseData.self, inMemory: true)
         .padding()
 } 

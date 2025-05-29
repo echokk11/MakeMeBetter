@@ -11,7 +11,9 @@ import SwiftData
 struct BodyDataSection: View {
     @Binding var bodyData: BodyData?
     let selectedDate: Date
+    let isLocked: Bool
     @Environment(\.modelContext) private var modelContext
+    @StateObject private var healthKitManager = HealthKitManager.shared
     
     @State private var weight: Double?
     @State private var bodyFat: Double?
@@ -53,21 +55,27 @@ struct BodyDataSection: View {
                     title: "体重",
                     unit: "kg",
                     value: $weight,
-                    range: 40.0...120.0
+                    range: 40.0...120.0,
+                    displayValue: weight != nil ? String(format: "%.1f", weight!) : "N/A",
+                    isDisabled: isLocked
                 )
                 
                 SliderInputView(
                     title: "体脂",
                     unit: "%",
                     value: $bodyFat,
-                    range: 8.0...35.0
+                    range: 8.0...35.0,
+                    displayValue: bodyFat != nil ? String(format: "%.1f", bodyFat!) : "N/A",
+                    isDisabled: isLocked
                 )
                 
                 SliderInputView(
                     title: "腰围",
                     unit: "cm",
                     value: $waistline,
-                    range: 60.0...120.0
+                    range: 60.0...120.0,
+                    displayValue: waistline != nil ? String(format: "%.1f", waistline!) : "N/A",
+                    isDisabled: isLocked
                 )
             }
             .padding(.horizontal, 20)
@@ -75,15 +83,33 @@ struct BodyDataSection: View {
         .padding(.vertical, 12)
         .onAppear {
             loadData()
+            Task {
+                await autoSyncHealthDataForDate()
+            }
         }
         .onChange(of: bodyData) { _ in
             loadData()
         }
-        .onChange(of: weight) { _ in 
+        .onChange(of: selectedDate) { _, _ in
+            Task {
+                await autoSyncHealthDataForDate()
+            }
+        }
+        .onChange(of: weight) { _, _ in 
             saveData()
         }
-        .onChange(of: bodyFat) { _ in saveData() }
-        .onChange(of: waistline) { _ in saveData() }
+        .onChange(of: bodyFat) { _, _ in 
+            saveData() 
+        }
+        .onChange(of: waistline) { _, newValue in 
+            saveData()
+            // 腰围修改后自动写入Apple Health（仅在非锁定状态）
+            if !isLocked, let waistValue = newValue {
+                Task {
+                    await saveWaistToHealthKit(waistValue)
+                }
+            }
+        }
     }
     
     private func loadData() {
@@ -93,6 +119,11 @@ struct BodyDataSection: View {
     }
     
     private func saveData() {
+        // 如果锁定状态，不保存数据
+        if isLocked {
+            return
+        }
+        
         if bodyData == nil {
             let newBodyData = BodyData(date: selectedDate)
             modelContext.insert(newBodyData)
@@ -150,11 +181,63 @@ struct BodyDataSection: View {
             return "肥胖"
         }
     }
+    
+    private func autoSyncHealthDataForDate() async {
+        // 只有在本地没有数据时才从Apple Health自动同步
+        guard bodyData == nil || (bodyData?.weight == nil && bodyData?.bodyFat == nil && bodyData?.waistline == nil) else {
+            return
+        }
+        
+        guard healthKitManager.isAuthorized else {
+            await healthKitManager.requestAuthorization()
+            return
+        }
+        
+        let healthData = await healthKitManager.fetchAllDataForDate(selectedDate)
+        
+        // 只更新本地没有的数据
+        var hasUpdates = false
+        
+        if bodyData?.weight == nil, let healthWeight = healthData.weight {
+            weight = healthWeight
+            hasUpdates = true
+        }
+        
+        if bodyData?.bodyFat == nil, let healthBodyFat = healthData.bodyFat {
+            bodyFat = healthBodyFat * 100 // 转换为百分比
+            hasUpdates = true
+        }
+        
+        if bodyData?.waistline == nil, let healthWaist = healthData.waist {
+            waistline = healthWaist
+            hasUpdates = true
+        }
+        
+        // 如果有更新，保存数据
+        if hasUpdates {
+            saveData()
+            print("自动同步健康数据完成 - 日期: \(selectedDate)")
+        }
+    }
+    
+    private func saveWaistToHealthKit(_ waist: Double) async {
+        guard healthKitManager.isAuthorized else {
+            return
+        }
+        
+        // 创建带有指定日期的腰围数据
+        let success = await healthKitManager.saveWaistCircumferenceForDate(waist, date: selectedDate)
+        if success {
+            print("腰围数据已保存到Apple Health: \(waist)cm，日期: \(selectedDate)")
+        } else {
+            print("保存腰围数据到Apple Health失败")
+        }
+    }
 }
 
 #Preview {
     @State var bodyData: BodyData? = nil
-    return BodyDataSection(bodyData: $bodyData, selectedDate: Date())
+    return BodyDataSection(bodyData: $bodyData, selectedDate: Date(), isLocked: false)
         .modelContainer(for: BodyData.self, inMemory: true)
         .padding()
 } 
