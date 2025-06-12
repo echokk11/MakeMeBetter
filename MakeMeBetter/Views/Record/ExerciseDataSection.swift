@@ -11,7 +11,6 @@ import SwiftData
 struct ExerciseDataSection: View {
     @Binding var exerciseData: [ExerciseData]
     let selectedDate: Date
-    let isLocked: Bool
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var appStateManager: AppStateManager
     
@@ -28,7 +27,6 @@ struct ExerciseDataSection: View {
                         exerciseType: type,
                         exerciseData: exerciseDataForType(type),
                         selectedDate: selectedDate,
-                        isLocked: isLocked,
                         onDataChanged: { data in
                             updateExerciseData(for: type, with: data)
                         }
@@ -39,10 +37,6 @@ struct ExerciseDataSection: View {
             .padding(.horizontal, 20)
         }
         .padding(.vertical, 12)
-        .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextDidSave)) { _ in
-            print("收到数据库变化通知，重新加载锻炼数据")
-            exerciseData = []
-        }
         .onReceive(NotificationCenter.default.publisher(for: .resetUIStates)) { _ in
             print("收到UI重置通知，重置锻炼数据UI状态")
             exerciseData = []
@@ -74,7 +68,6 @@ struct ExerciseTypeCard: View {
     let exerciseType: ExerciseType
     let exerciseData: ExerciseData?
     let selectedDate: Date
-    let isLocked: Bool
     let onDataChanged: (ExerciseData?) -> Void
     
     @Environment(\.modelContext) private var modelContext
@@ -115,58 +108,52 @@ struct ExerciseTypeCard: View {
                 unit: "m",
                 value: $duration,
                 range: 0.0...120.0,
-                step: 1.0,
-                isDisabled: isLocked
+                step: 1.0
             )
             
             // 快捷按钮
             HStack(spacing: 8) {
                 Text("快捷:")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(isLocked ? .secondary.opacity(0.6) : .secondary)
+                    .foregroundColor(.secondary)
                 
                 ForEach(quickDurations, id: \.self) { minutes in
                     Button(action: {
-                        if !isLocked {
-                            duration = minutes
-                            // 添加触觉反馈
-                            HapticFeedback.shared.lightImpact()
-                        }
+                        duration = minutes
+                        // 添加触觉反馈
+                        HapticFeedback.shared.lightImpact()
                     }) {
                         Text("\(Int(minutes))")
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(isLocked ? .secondary : (duration == minutes ? .white : accentColor))
+                            .foregroundColor(duration == minutes ? .white : accentColor)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(isLocked ? Color.gray.opacity(0.2) : (duration == minutes ? accentColor : accentColor.opacity(0.1)))
+                            .background(duration == minutes ? accentColor : accentColor.opacity(0.1))
                             .cornerRadius(6)
                     }
-                    .disabled(isLocked)
                 }
                 
                 Spacer()
             }
-            .opacity(isLocked ? 0.6 : 1.0)
         }
         .padding(12)
         .background(backgroundColor)
         .cornerRadius(10)
         .onAppear {
-            loadData()
+            duration = exerciseData?.duration
         }
-        .onChange(of: selectedDate) { oldDate, newDate in
-            // 日期变化时立即重置状态，避免脏数据
-            print("日期变化: \(oldDate) -> \(newDate), 重置 \(exerciseType.rawValue) 数据")
-            loadData()
-        }
+
         .onChange(of: exerciseData) { oldData, newData in
             // 数据变化时更新UI状态
             print("数据变化: \(exerciseType.rawValue), 旧数据: \(oldData?.duration ?? 0), 新数据: \(newData?.duration ?? 0)")
-            loadData()
+            // 只有当数据确实发生变化时才加载，且避免循环触发
+            if oldData !== newData, newData?.duration != duration {
+                duration = newData?.duration
+            }
         }
         .onChange(of: duration) { oldDuration, newDuration in
-            // 只有用户主动修改时才保存
-            if oldDuration != newDuration {
+            // 只有用户主动修改时才保存，且避免加载时触发保存
+            if oldDuration != newDuration, newDuration != exerciseData?.duration {
                 print("用户修改时长: \(exerciseType.rawValue), \(oldDuration ?? 0) -> \(newDuration ?? 0)")
                 saveData()
             }
@@ -177,16 +164,9 @@ struct ExerciseTypeCard: View {
         }
     }
     
-    private func loadData() {
-        duration = exerciseData?.duration
-        print("加载锻炼数据 - 类型: \(exerciseType.rawValue), 日期: \(selectedDate), 数据存在: \(exerciseData != nil), 时长: \(duration ?? 0)")
-    }
+
     
     private func saveData() {
-        // 如果锁定状态，不保存数据
-        if isLocked {
-            return
-        }
         
         // 验证日期有效性 - 更严格的检查
         guard !selectedDate.timeIntervalSince1970.isNaN,
@@ -227,7 +207,7 @@ struct ExerciseTypeCard: View {
 
 #Preview {
     @Previewable @State var exerciseData: [ExerciseData] = []
-    return ExerciseDataSection(exerciseData: $exerciseData, selectedDate: Date(), isLocked: false)
+    return ExerciseDataSection(exerciseData: $exerciseData, selectedDate: Date())
         .modelContainer(for: ExerciseData.self, inMemory: true)
         .padding()
 } 

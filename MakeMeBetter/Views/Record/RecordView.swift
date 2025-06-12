@@ -21,10 +21,11 @@ struct RecordView: View {
     @State private var selectedDate = Date()
     @State private var bodyData: BodyData?
     @State private var exerciseData: [ExerciseData] = []
-    @State private var isLocked = false
+
     @State private var consecutiveDays = 0
     @State private var showFireworks = false
     @State private var refreshKey = UUID() // 强制刷新key
+    @State private var shouldShowEncouragement = false // 新增：控制是否显示鼓励横幅
     
     // 判断是否是历史日期（当天之前）
     private var isHistoricalDate: Bool {
@@ -33,46 +34,39 @@ struct RecordView: View {
     }
     
     var body: some View {
-        ScrollView {
+        VStack(spacing: 0) {
+            // 固定的日期选择器
             VStack(spacing: 0) {
-                // 顶部安全区域 - 与刘海屏融为一体
-                Color.clear
-                    .frame(height: 1)
-                
-                // 日期选择器和锁定按钮
+                // 日期选择器
                 HStack {
                     DateSelectorView(selectedDate: $selectedDate)
-                    
-                    // 锁定按钮 - 只在历史日期显示
-                    if isHistoricalDate {
-                        Button(action: {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                isLocked.toggle()
-                            }
-                        }) {
-                            Image(systemName: isLocked ? "lock.fill" : "lock.open.fill")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(isLocked ? .red : .green)
-                                .frame(width: 32, height: 32)
-                                .background((isLocked ? Color.red : Color.green).opacity(0.1))
-                                .clipShape(Circle())
-                        }
-                        .padding(.trailing, 20)
-                    }
                 }
                 .padding(.top, 8)
                 .padding(.bottom, 16)
+                .background(
+                    LinearGradient(
+                        colors: [.blue.opacity(0.1), .purple.opacity(0.1)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
                 
+                // 分隔线
+                Divider()
+                    .opacity(0.3)
+            }
+            
+            // 可滚动的内容区域
+            ScrollView {
                 VStack(spacing: 12) {
                     BodyDataSection(
                         bodyData: $bodyData,
-                        selectedDate: selectedDate,
-                        isLocked: isHistoricalDate && isLocked
+                        selectedDate: selectedDate
                     )
                     .id("body-\(selectedDate.timeIntervalSince1970)-\(refreshKey)")
                     
-                    // 鼓励横幅 - 放在身体数据和锻炼数据之间
-                    if consecutiveDays >= 2 {
+                    // 鼓励横幅 - 只在有数据且连续天数>=2时显示
+                    if shouldShowEncouragement && consecutiveDays >= 2 {
                         EncouragementView(consecutiveDays: consecutiveDays, showFireworks: $showFireworks)
                             .padding(.horizontal, 4)
                             .padding(.vertical, 8)
@@ -80,14 +74,21 @@ struct RecordView: View {
                     
                     ExerciseDataSection(
                         exerciseData: $exerciseData,
-                        selectedDate: selectedDate,
-                        isLocked: isHistoricalDate && isLocked
+                        selectedDate: selectedDate
                     )
                     .id("exercise-\(selectedDate.timeIntervalSince1970)-\(refreshKey)")
                 }
                 .padding(.horizontal, 16)
+                .padding(.top, 16)
+                .padding(.bottom, 16)
             }
-            .padding(.bottom, 16)
+            .background(
+                LinearGradient(
+                    colors: [.blue.opacity(0.05), .purple.opacity(0.05)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
         }
         .id(refreshKey)
         .background(
@@ -99,33 +100,30 @@ struct RecordView: View {
         )
         .onAppear {
             loadDataForDate()
-            checkConsecutiveDays()
+            checkConsecutiveDaysAndEncouragement()
         }
         .onChange(of: selectedDate) { _, _ in
-            isLocked = true
+            // 更新refreshKey强制重建子组件
+            refreshKey = UUID()
             loadDataForDate()
-            checkConsecutiveDays()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextDidSave)) { _ in
-            loadDataForDate()
-            checkConsecutiveDays()
+            checkConsecutiveDaysAndEncouragement()
         }
         .onReceive(NotificationCenter.default.publisher(for: .recordTabSelected)) { _ in
             print("切换到记录tab，重新加载数据")
             loadDataForDate()
-            checkConsecutiveDays()
+            checkConsecutiveDaysAndEncouragement()
         }
         .onReceive(NotificationCenter.default.publisher(for: .dataCleared)) { _ in
             print("收到数据清空通知，重置所有UI状态")
             resetAllUIStates()
             loadDataForDate()
-            checkConsecutiveDays()
+            checkConsecutiveDaysAndEncouragement()
         }
         .onChange(of: appStateManager.dataResetTrigger) { _, _ in
             print("检测到全局数据重置，强制重置所有UI状态")
             resetAllUIStates()
             loadDataForDate()
-            checkConsecutiveDays()
+            checkConsecutiveDaysAndEncouragement()
         }
     }
     
@@ -137,11 +135,13 @@ struct RecordView: View {
         
         let startOfDay = Calendar.current.startOfDay(for: selectedDate)
         
-        print("开始加载日期数据: \(startOfDay)")
+        print("🔄 开始加载日期数据: \(startOfDay)")
+        print("📅 当前选择日期: \(selectedDate)")
+        print("📅 标准化日期: \(startOfDay)")
         
-        // 先清空当前数据，避免脏数据
-        bodyData = nil
-        exerciseData = []
+        // 临时存储新数据
+        var newBodyData: BodyData? = nil
+        var newExerciseData: [ExerciseData] = []
         
         // 加载身体数据
         let bodyDataDescriptor = FetchDescriptor<BodyData>(
@@ -150,10 +150,14 @@ struct RecordView: View {
         
         do {
             let bodyDataResults = try modelContext.fetch(bodyDataDescriptor)
-            bodyData = bodyDataResults.first
+            newBodyData = bodyDataResults.first
+            print("💪 身体数据查询结果: 找到 \(bodyDataResults.count) 条记录")
+            if let data = newBodyData {
+                print("💪 身体数据详情: 体重=\(data.weight ?? 0), 体脂=\(data.bodyFat ?? 0), 腰围=\(data.waistline ?? 0)")
+            }
         } catch {
-            print("加载身体数据失败: \(error)")
-            bodyData = nil
+            print("❌ 加载身体数据失败: \(error)")
+            newBodyData = nil
         }
         
         // 加载锻炼数据
@@ -162,19 +166,40 @@ struct RecordView: View {
         )
         
         do {
-            let newExerciseData = try modelContext.fetch(exerciseDataDescriptor)
-            exerciseData = newExerciseData
+            newExerciseData = try modelContext.fetch(exerciseDataDescriptor)
+            print("🏃 锻炼数据查询结果: 找到 \(newExerciseData.count) 条记录")
+            for data in newExerciseData {
+                print("🏃 锻炼数据详情: 类型=\(data.exerciseType.rawValue), 时长=\(data.duration ?? 0)分钟")
+            }
         } catch {
-            print("加载锻炼数据失败: \(error)")
-            exerciseData = []
+            print("❌ 加载锻炼数据失败: \(error)")
+            newExerciseData = []
         }
         
-        print("加载完成 - 日期: \(startOfDay), 身体数据: \(bodyData != nil), 锻炼数据: \(exerciseData.count)条")
+        // 一次性更新所有数据
+        withAnimation(.easeInOut(duration: 0.2)) {
+            bodyData = newBodyData
+            exerciseData = newExerciseData
+        }
+        
+        print("✅ 加载完成 - 日期: \(startOfDay), 身体数据: \(bodyData != nil), 锻炼数据: \(exerciseData.count)条")
     }
     
-    private func checkConsecutiveDays() {
+    private func loadDataForDateAsync() async {
+        await MainActor.run {
+            loadDataForDate()
+        }
+    }
+    
+    private func checkConsecutiveDaysAndEncouragement() {
         let calendar = Calendar.current
-        var currentDate = Date() // 始终以今天为准
+        let selectedDayStart = calendar.startOfDay(for: selectedDate)
+        
+        // 1. 检查当前选择日期是否有任何数据（身体数据或锻炼数据）
+        let hasDataOnSelectedDate = hasAnyDataOnDate(selectedDayStart)
+        
+        // 2. 计算连续锻炼天数（从今天开始往前计算）
+        var currentDate = Date()
         var days = 0
         
         // 从今天开始往前检查连续锻炼天数
@@ -212,8 +237,23 @@ struct RecordView: View {
         
         consecutiveDays = days
         
-        // 如果连续天数>=2，触发烟花效果
-        if days >= 2 {
+        // 3. 判断是否显示鼓励横幅
+        let isToday = calendar.isDate(selectedDate, inSameDayAs: Date())
+        let isYesterday = calendar.isDate(selectedDate, inSameDayAs: calendar.date(byAdding: .day, value: -1, to: Date()) ?? Date())
+        
+        if isToday {
+            // 今天：有数据就显示
+            shouldShowEncouragement = hasDataOnSelectedDate
+        } else if isYesterday {
+            // 昨天：有数据且有连续记录就显示
+            shouldShowEncouragement = hasDataOnSelectedDate && days >= 1
+        } else {
+            // 其他历史日期：有数据就显示（但不会有烟花效果）
+            shouldShowEncouragement = hasDataOnSelectedDate
+        }
+        
+        // 4. 如果连续天数>=2且是今天，触发烟花效果
+        if days >= 2 && isToday && shouldShowEncouragement {
             withAnimation(.easeInOut(duration: 0.5)) {
                 showFireworks = true
             }
@@ -224,6 +264,45 @@ struct RecordView: View {
                     showFireworks = false
                 }
             }
+        } else {
+            showFireworks = false
+        }
+        
+        print("🎉 鼓励横幅逻辑: 选择日期=\(selectedDate), 有数据=\(hasDataOnSelectedDate), 连续天数=\(days), 显示横幅=\(shouldShowEncouragement)")
+    }
+    
+    // 检查指定日期是否有任何数据（身体数据或锻炼数据）
+    private func hasAnyDataOnDate(_ date: Date) -> Bool {
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: date)
+        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+        
+        // 检查身体数据
+        let bodyDataDescriptor = FetchDescriptor<BodyData>(
+            predicate: #Predicate<BodyData> { body in
+                body.date >= dayStart && body.date < dayEnd &&
+                (body.weight != nil || body.bodyFat != nil || body.waistline != nil)
+            }
+        )
+        
+        // 检查锻炼数据
+        let exerciseDataDescriptor = FetchDescriptor<ExerciseData>(
+            predicate: #Predicate<ExerciseData> { exercise in
+                exercise.date >= dayStart && exercise.date < dayEnd &&
+                exercise.duration != nil && (exercise.duration ?? 0) > 0
+            }
+        )
+        
+        do {
+            let bodyDataResults = try modelContext.fetch(bodyDataDescriptor)
+            let exerciseDataResults = try modelContext.fetch(exerciseDataDescriptor)
+            
+            let hasData = !bodyDataResults.isEmpty || !exerciseDataResults.isEmpty
+            print("📊 日期 \(dayStart) 数据检查: 身体数据=\(bodyDataResults.count)条, 锻炼数据=\(exerciseDataResults.count)条, 有数据=\(hasData)")
+            return hasData
+        } catch {
+            print("❌ 检查数据失败: \(error)")
+            return false
         }
     }
     
@@ -233,6 +312,7 @@ struct RecordView: View {
         exerciseData = []
         consecutiveDays = 0
         showFireworks = false
+        shouldShowEncouragement = false
         
         // 确保selectedDate保持有效
         if selectedDate.timeIntervalSince1970.isNaN || selectedDate.timeIntervalSince1970 <= 0 {

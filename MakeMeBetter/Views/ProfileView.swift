@@ -13,7 +13,7 @@ struct ProfileView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var appStateManager: AppStateManager
     @Query private var profiles: [UserProfile]
-    @StateObject private var healthKitManager = HealthKitManager.shared
+
     
     @State private var selectedGender: String = "男"
     @State private var birthDate = Calendar.current.date(from: DateComponents(year: 1990, month: 1, day: 1)) ?? Date()
@@ -22,6 +22,12 @@ struct ProfileView: View {
     @State private var selectedPhoto: PhotosPickerItem? = nil
     @State private var avatarImage: UIImage? = nil
     @State private var showingClearDataAlert = false
+    
+    // 目标设定相关状态
+    @State private var targetWeight: Double?
+    @State private var targetBodyFat: Double?
+    @State private var targetWaistline: Double?
+
     
     private let genders = ["男", "女"]
     
@@ -39,8 +45,8 @@ struct ProfileView: View {
                     
                     VStack(spacing: 24) {
                         avatarSelectionSection
-                        healthSyncSection
                         basicInfoSection
+                        targetsSection
                         clearDataSection
                     }
                     .padding(.horizontal)
@@ -59,9 +65,6 @@ struct ProfileView: View {
         .onAppear {
             loadProfile()
             loadAvatarFromLocal()
-            Task {
-                await healthKitManager.requestAuthorization()
-            }
         }
     }
     
@@ -98,66 +101,7 @@ struct ProfileView: View {
         }
     }
     
-    private var healthSyncSection: some View {
-        VStack(spacing: 16) {
-            HStack {
-                Image(systemName: "heart.text.square")
-                    .foregroundColor(.red)
-                    .font(.title2)
-                Text("健康数据集成")
-                    .font(.headline)
-                    .foregroundColor(.primary)
-                Spacer()
-            }
-            
-            if !healthKitManager.isAuthorized {
-                VStack(spacing: 8) {
-                    Text("连接健康应用以自动同步身体数据")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                    
-                    Button(action: {
-                        Task {
-                            await healthKitManager.requestAuthorization()
-                        }
-                    }) {
-                        Text("连接健康应用")
-                            .font(.caption)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(.green)
-                            )
-                    }
-                }
-            } else {
-                HStack {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
-                    Text("已连接健康应用")
-                        .font(.caption)
-                        .foregroundColor(.green)
-                    Spacer()
-                }
-            }
-            
-            if let error = healthKitManager.authorizationError {
-                Text(error)
-                    .font(.caption)
-                    .foregroundColor(.red)
-                    .multilineTextAlignment(.center)
-            }
-        }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(.ultraThinMaterial)
-                .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 2)
-        )
-    }
+    // HealthKit功能已移除，采用纯本地存储
     
     private var basicInfoSection: some View {
         VStack(spacing: 20) {
@@ -258,6 +202,128 @@ struct ProfileView: View {
         )
     }
     
+    private var targetsSection: some View {
+        VStack(spacing: 20) {
+            // 标题
+            HStack {
+                Image(systemName: "target")
+                    .foregroundColor(.orange)
+                    .font(.title2)
+                Text("目标设定")
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                Spacer()
+            }
+            
+            VStack(spacing: 16) {
+                // 目标体重
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "scalemass")
+                            .foregroundColor(.blue)
+                            .font(.body)
+                        Text("目标体重")
+                            .font(.body)
+                            .foregroundColor(.primary)
+                        Spacer()
+                        if let target = targetWeight {
+                            Text("\(target, specifier: "%.1f") kg")
+                                .font(.body)
+                                .foregroundColor(.secondary)
+                        } else {
+                            Text("未设置")
+                                .font(.body)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
+                    SliderInputView(
+                        title: "",
+                        unit: "kg",
+                        value: $targetWeight,
+                        range: 40.0...120.0,
+                        displayValue: targetWeight != nil ? String(format: "%.1f", targetWeight!) : "点击设置"
+                    )
+                    .onChange(of: targetWeight) { _, _ in
+                        saveTargets()
+                    }
+                }
+                
+                // 目标体脂
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "percent")
+                            .foregroundColor(.green)
+                            .font(.body)
+                        Text("目标体脂")
+                            .font(.body)
+                            .foregroundColor(.primary)
+                        Spacer()
+                        if let target = targetBodyFat {
+                            Text("\(target, specifier: "%.1f") %")
+                                .font(.body)
+                                .foregroundColor(.secondary)
+                        } else {
+                            Text("未设置")
+                                .font(.body)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
+                    SliderInputView(
+                        title: "",
+                        unit: "%",
+                        value: $targetBodyFat,
+                        range: 8.0...35.0,
+                        displayValue: targetBodyFat != nil ? String(format: "%.1f", targetBodyFat!) : "点击设置"
+                    )
+                    .onChange(of: targetBodyFat) { _, _ in
+                        saveTargets()
+                    }
+                }
+                
+                // 目标腰围
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "ruler")
+                            .foregroundColor(.purple)
+                            .font(.body)
+                        Text("目标腰围")
+                            .font(.body)
+                            .foregroundColor(.primary)
+                        Spacer()
+                        if let target = targetWaistline {
+                            Text("\(target, specifier: "%.1f") cm")
+                                .font(.body)
+                                .foregroundColor(.secondary)
+                        } else {
+                            Text("未设置")
+                                .font(.body)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
+                    SliderInputView(
+                        title: "",
+                        unit: "cm",
+                        value: $targetWaistline,
+                        range: 60.0...120.0,
+                        displayValue: targetWaistline != nil ? String(format: "%.1f", targetWaistline!) : "点击设置"
+                    )
+                    .onChange(of: targetWaistline) { _, _ in
+                        saveTargets()
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.ultraThinMaterial)
+                .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 2)
+        )
+    }
+    
     private var clearDataSection: some View {
         VStack(spacing: 16) {
             HStack {
@@ -307,28 +373,59 @@ struct ProfileView: View {
     private func loadProfile() {
         if let profile = currentProfile {
             selectedGender = profile.gender
-            birthDate = profile.birthDate
             height = profile.height
+            birthDate = profile.birthDate
+            
+            // 加载目标设定
+            targetWeight = profile.targetWeight
+            targetBodyFat = profile.targetBodyFat
+            targetWaistline = profile.targetWaistline
         }
     }
     
     private func saveProfile() {
         if let existingProfile = currentProfile {
-            existingProfile.gender = selectedGender
-            existingProfile.birthDate = birthDate
-            if let height = height {
-                existingProfile.height = height
-            }
+            existingProfile.updateProfile(
+                gender: selectedGender,
+                height: height,
+                birthDate: birthDate
+            )
         } else {
             let newProfile = UserProfile(
                 gender: selectedGender,
-                birthDate: birthDate,
-                height: height ?? 170.0
+                height: height ?? 170.0,
+                birthDate: birthDate
             )
             modelContext.insert(newProfile)
         }
         
         try? modelContext.save()
+        print("用户资料已保存: 性别=\(selectedGender), 身高=\(height?.description ?? "未设置"), 出生日期=\(birthDate)")
+    }
+    
+    private func saveTargets() {
+        if let existingProfile = currentProfile {
+            existingProfile.updateTargets(
+                weight: targetWeight,
+                bodyFat: targetBodyFat,
+                waistline: targetWaistline
+            )
+        } else {
+            let newProfile = UserProfile(
+                gender: selectedGender,
+                height: height ?? 170.0,
+                birthDate: birthDate
+            )
+            newProfile.updateTargets(
+                weight: targetWeight,
+                bodyFat: targetBodyFat,
+                waistline: targetWaistline
+            )
+            modelContext.insert(newProfile)
+        }
+        
+        try? modelContext.save()
+        print("目标设定已保存: 体重=\(targetWeight?.description ?? "未设置"), 体脂=\(targetBodyFat?.description ?? "未设置"), 腰围=\(targetWaistline?.description ?? "未设置")")
     }
     
     private func saveAvatarToLocal(_ image: UIImage) {

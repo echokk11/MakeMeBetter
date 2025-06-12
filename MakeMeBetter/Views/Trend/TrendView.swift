@@ -15,6 +15,7 @@ struct TrendView: View {
     @State private var exerciseDataList: [ExerciseData] = []
     @State private var selectedMetric: MetricType = .weight
     @State private var dateRange: DateRange = .week
+    @State private var userProfile: UserProfile?
     
     enum MetricType: String, CaseIterable {
         case weight = "体重"
@@ -121,19 +122,34 @@ struct TrendView: View {
                         
                         Spacer()
                         
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(selectedMetric.color)
-                                .frame(width: 8, height: 8)
+                        VStack(alignment: .trailing, spacing: 4) {
+                            HStack(spacing: 4) {
+                                Circle()
+                                    .fill(selectedMetric.color)
+                                    .frame(width: 8, height: 8)
+                                
+                                Text(selectedMetric.unit)
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(selectedMetric.color)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(selectedMetric.color.opacity(0.1))
+                            .cornerRadius(12)
                             
-                            Text(selectedMetric.unit)
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(selectedMetric.color)
+                            // 显示目标值
+                            if let targetValue = currentTargetValue {
+                                HStack(spacing: 4) {
+                                    Text("目标:")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.secondary)
+                                    
+                                    Text("\(formatValue(targetValue))\(selectedMetric.unit)")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundColor(.orange)
+                                }
+                            }
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(selectedMetric.color.opacity(0.1))
-                        .cornerRadius(12)
                     }
                     .padding(.horizontal, 20)
                     
@@ -163,38 +179,57 @@ struct TrendView: View {
                         )
                         .padding(.horizontal, 20)
                     } else {
-                        Chart(chartData, id: \.date) { item in
-                            LineMark(
-                                x: .value("日期", item.date),
-                                y: .value(selectedMetric.rawValue, item.value)
-                            )
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [selectedMetric.color, selectedMetric.color.opacity(0.8)],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
+                        Chart {
+                            // 数据曲线
+                            ForEach(chartData, id: \.date) { item in
+                                LineMark(
+                                    x: .value("日期", item.date),
+                                    y: .value(selectedMetric.rawValue, item.value)
                                 )
-                            )
-                            .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round))
-                            
-                            AreaMark(
-                                x: .value("日期", item.date),
-                                y: .value(selectedMetric.rawValue, item.value)
-                            )
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [selectedMetric.color.opacity(0.3), selectedMetric.color.opacity(0.05)],
-                                    startPoint: .top,
-                                    endPoint: .bottom
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        colors: [selectedMetric.color, selectedMetric.color.opacity(0.8)],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
                                 )
-                            )
+                                .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round))
+                                
+                                AreaMark(
+                                    x: .value("日期", item.date),
+                                    y: .value(selectedMetric.rawValue, item.value)
+                                )
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        colors: [selectedMetric.color.opacity(0.3), selectedMetric.color.opacity(0.05)],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                )
+                                
+                                PointMark(
+                                    x: .value("日期", item.date),
+                                    y: .value(selectedMetric.rawValue, item.value)
+                                )
+                                .foregroundStyle(selectedMetric.color)
+                                .symbolSize(40)
+                            }
                             
-                            PointMark(
-                                x: .value("日期", item.date),
-                                y: .value(selectedMetric.rawValue, item.value)
-                            )
-                            .foregroundStyle(selectedMetric.color)
-                            .symbolSize(40)
+                            // 目标线（虚线）
+                            if let targetValue = currentTargetValue {
+                                RuleMark(y: .value("目标", targetValue))
+                                    .foregroundStyle(.orange)
+                                    .lineStyle(StrokeStyle(lineWidth: 2, dash: [5, 5]))
+                                    .annotation(position: .topTrailing) {
+                                        Text("目标: \(formatValue(targetValue))")
+                                            .font(.caption)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(.orange.opacity(0.1))
+                                            .foregroundColor(.orange)
+                                            .cornerRadius(8)
+                                    }
+                            }
                         }
                         .frame(height: 220)
                         .padding(.horizontal, 20)
@@ -209,7 +244,7 @@ struct TrendView: View {
                             }
                         }
                         .chartYAxis {
-                            AxisMarks { value in
+                            AxisMarks(values: .automatic(desiredCount: 5)) { value in
                                 AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                                     .foregroundStyle(.gray.opacity(0.3))
                                 AxisValueLabel()
@@ -217,6 +252,7 @@ struct TrendView: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
+                        .chartYScale(domain: yAxisRange)
                         .chartPlotStyle { plotArea in
                             plotArea
                                 .background(Color(.systemBackground))
@@ -245,12 +281,72 @@ struct TrendView: View {
         )
         .onAppear {
             loadData()
+            loadUserProfile()
         }
         .onChange(of: selectedMetric) { _, _ in
             // 切换指标时不需要重新加载数据，只需要重新计算chartData
         }
         .onChange(of: dateRange) { _, _ in
             // 切换时间范围时不需要重新加载数据，只需要重新计算chartData
+        }
+    }
+    
+    // 智能Y轴范围计算
+    private var yAxisRange: ClosedRange<Double> {
+        guard !chartData.isEmpty else { return 0...100 }
+        
+        let values = chartData.map { $0.value }
+        let minValue = values.min()!
+        let maxValue = values.max()!
+        
+        // 如果有目标值，考虑目标值在范围内
+        var rangeMin = minValue
+        var rangeMax = maxValue
+        
+        if let targetValue = currentTargetValue {
+            rangeMin = min(rangeMin, targetValue)
+            rangeMax = max(rangeMax, targetValue)
+        }
+        
+        // 计算缓冲区（范围的10-20%）
+        let range = rangeMax - rangeMin
+        let buffer = max(range * 0.15, getMinimumBuffer()) // 至少保持最小缓冲
+        
+        let finalMin = max(rangeMin - buffer, getAbsoluteMinimum())
+        let finalMax = rangeMax + buffer
+        
+        return finalMin...finalMax
+    }
+    
+    // 获取当前指标的目标值
+    private var currentTargetValue: Double? {
+        guard let profile = userProfile else { return nil }
+        
+        switch selectedMetric {
+        case .weight: return profile.targetWeight
+        case .bodyFat: return profile.targetBodyFat
+        case .waistline: return profile.targetWaistline
+        case .cardio, .strength, .hiit: return nil // 运动类型暂不支持目标
+        }
+    }
+    
+    // 获取最小缓冲值
+    private func getMinimumBuffer() -> Double {
+        switch selectedMetric {
+        case .weight: return 2.0 // kg
+        case .bodyFat: return 1.0 // %
+        case .waistline: return 2.0 // cm
+        case .cardio, .strength, .hiit: return 5.0 // 分钟
+        }
+    }
+    
+    // 获取绝对最小值
+    private func getAbsoluteMinimum() -> Double {
+        switch selectedMetric {
+        case .weight: return 40.0
+        case .bodyFat: return 5.0
+        case .waistline: return 50.0
+        case .cardio, .strength, .hiit: return 0.0
         }
     }
     
@@ -331,6 +427,27 @@ struct TrendView: View {
         }
     }
     
+    private func loadUserProfile() {
+        let profileDescriptor = FetchDescriptor<UserProfile>()
+        
+        do {
+            let profiles = try modelContext.fetch(profileDescriptor)
+            userProfile = profiles.first
+        } catch {
+            print("加载用户资料失败: \(error)")
+            userProfile = nil
+        }
+    }
+    
+    private func formatValue(_ value: Double) -> String {
+        switch selectedMetric {
+        case .weight, .bodyFat, .waistline:
+            return String(format: "%.1f", value)
+        case .cardio, .strength, .hiit:
+            return String(format: "%.0f", value)
+        }
+    }
+    
     private func iconForMetric(_ metric: MetricType) -> String {
         switch metric {
         case .weight: return "scalemass"
@@ -350,5 +467,5 @@ struct ChartDataPoint {
 
 #Preview {
     TrendView()
-        .modelContainer(for: [BodyData.self, ExerciseData.self], inMemory: true)
+        .modelContainer(for: [BodyData.self, ExerciseData.self, UserProfile.self], inMemory: true)
 } 

@@ -131,25 +131,106 @@ class HealthKitManager: ObservableObject {
     }
     
     func saveWaistCircumferenceForDate(_ value: Double, date: Date) async -> Bool {
+        print("开始保存腰围数据: \(value)cm，日期: \(date)")
+        
+        // 先检查是否已有当天的数据
+        let existingValue = await fetchWaistCircumferenceForDate(date)
+        
+        // 只有当新值与现有值不同时才删除旧数据
+        if let existing = existingValue, abs(existing - value) > 0.1 {
+            print("发现当天已有腰围数据: \(existing)cm，将删除后保存新值: \(value)cm")
+            let deleteSuccess = await deleteWaistCircumferenceForDate(date)
+            if !deleteSuccess {
+                print("删除当天旧腰围数据失败，但继续保存新数据")
+            }
+        } else if existingValue == nil {
+            print("当天没有腰围数据，直接保存新值")
+        } else {
+            print("新值与现有值相同，跳过保存")
+            return true
+        }
+        
         guard let waistType = HKObjectType.quantityType(forIdentifier: .waistCircumference) else {
+            print("无法获取腰围数据类型")
             return false
         }
+        
+        // 确保使用当天的开始时间
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
         
         let quantity = HKQuantity(unit: .meterUnit(with: .centi), doubleValue: value)
         let sample = HKQuantitySample(
             type: waistType,
             quantity: quantity,
-            start: date,
-            end: date
+            start: startOfDay,
+            end: startOfDay
         )
         
         return await withCheckedContinuation { continuation in
             healthStore.save(sample) { success, error in
                 if let error = error {
                     print("保存腰围数据失败: \(error.localizedDescription)")
+                } else if success {
+                    print("成功保存腰围数据到Apple Health: \(value)cm，日期: \(startOfDay)")
+                } else {
+                    print("保存腰围数据失败，但没有错误信息")
                 }
                 continuation.resume(returning: success)
             }
+        }
+    }
+    
+    // MARK: - 删除数据
+    
+    private func deleteWaistCircumferenceForDate(_ date: Date) async -> Bool {
+        guard let waistType = HKObjectType.quantityType(forIdentifier: .waistCircumference) else {
+            return false
+        }
+        
+        // 创建查询，获取指定日期的所有腰围数据
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? startOfDay
+        
+        let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: endOfDay, options: .strictStartDate)
+        
+        return await withCheckedContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: waistType,
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: nil
+            ) { [weak self] _, samples, error in
+                guard let self = self else {
+                    continuation.resume(returning: false)
+                    return
+                }
+                
+                if let error = error {
+                    print("查询当天腰围数据失败: \(error.localizedDescription)")
+                    continuation.resume(returning: false)
+                    return
+                }
+                
+                guard let samples = samples, !samples.isEmpty else {
+                    // 没有数据需要删除，返回成功
+                    continuation.resume(returning: true)
+                    return
+                }
+                
+                // 删除找到的所有样本
+                self.healthStore.delete(samples) { success, error in
+                    if let error = error {
+                        print("删除当天腰围数据失败: \(error.localizedDescription)")
+                    } else {
+                        print("成功删除当天的\(samples.count)条腰围数据")
+                    }
+                    continuation.resume(returning: success)
+                }
+            }
+            
+            healthStore.execute(query)
         }
     }
     
@@ -230,5 +311,58 @@ class HealthKitManager: ObservableObject {
         async let waist = fetchWaistCircumferenceForDate(date)
         
         return await (weight, height, bodyFat, waist)
+    }
+    
+    // MARK: - 测试和调试
+    
+    func testHealthKitConnection() async -> String {
+        var result = "HealthKit测试结果:\n"
+        
+        // 检查设备支持
+        if !HKHealthStore.isHealthDataAvailable() {
+            result += "❌ 设备不支持HealthKit\n"
+            return result
+        }
+        result += "✅ 设备支持HealthKit\n"
+        
+        // 检查权限
+        guard let waistType = HKObjectType.quantityType(forIdentifier: .waistCircumference) else {
+            result += "❌ 无法获取腰围数据类型\n"
+            return result
+        }
+        
+        let authStatus = healthStore.authorizationStatus(for: waistType)
+        switch authStatus {
+        case .notDetermined:
+            result += "⚠️ 权限未确定，需要请求权限\n"
+        case .sharingDenied:
+            result += "❌ 用户拒绝了写入权限\n"
+        case .sharingAuthorized:
+            result += "✅ 已获得写入权限\n"
+        @unknown default:
+            result += "❓ 未知权限状态\n"
+        }
+        
+        // 测试保存功能
+        if authStatus == .sharingAuthorized {
+            result += "正在测试保存功能...\n"
+            let testValue = 80.0
+            let success = await saveWaistCircumferenceForDate(testValue, date: Date())
+            if success {
+                result += "✅ 测试保存成功\n"
+                
+                // 测试读取功能
+                let readValue = await fetchWaistCircumferenceForDate(Date())
+                if let value = readValue, abs(value - testValue) < 0.1 {
+                    result += "✅ 测试读取成功，值: \(value)cm\n"
+                } else {
+                    result += "⚠️ 测试读取失败或值不匹配\n"
+                }
+            } else {
+                result += "❌ 测试保存失败\n"
+            }
+        }
+        
+        return result
     }
 } 
